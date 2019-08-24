@@ -20,10 +20,11 @@ The goals / steps of this project are the following:
 
 [//]: # (Image References)
 
-[image1]: ./examples/visualization.jpg "Visualization"
-[image2]: ./examples/grayscale.jpg "Grayscaling"
-[image3]: ./examples/random_noise.jpg "Random Noise"
-[image4]: ./examples/placeholder.png "Traffic Sign 1"
+[image1]: ./writeup_images/01_visualize.png "Visualization"
+[image2]: ./writeup_images/02_TrainDistr.png "Training data distribution"
+[image3]: ./writeup_images/03_ValidDistr.png "Validation data distribution"
+[image4]: ./writeup_images/04_TestDistr.png "Test data distribution"
+
 [image5]: ./examples/placeholder.png "Traffic Sign 2"
 [image6]: ./examples/placeholder.png "Traffic Sign 3"
 [image7]: ./examples/placeholder.png "Traffic Sign 4"
@@ -41,24 +42,157 @@ You're reading it! Here is a link to my [project code](Traffic_Sign_Classifier.i
 
 ### Data Set Summary & Exploration
 #### Data download and loading.
+Before anything can be done to the image data set, it needs to be downloaded and loaded in memory.
+I used zipfile, urllib3, and os libraries to do that. Code also checks to see if the file already exists before downloading it.
 
+``` python
+import zipfile
+import urllib3
+import os
 
+data_url = 'https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/traffic-signs-data.zip'
+zipFilename = 'image_data/traffic-signs-data.zip'
+
+# check for extraction directories existence
+if not os.path.isdir('image_data'):
+    os.makedirs('image_data')
+    
+if not os.path.isfile(zipFilename):
+    http = urllib3.PoolManager()
+    
+    # download data
+    print("Downloading ",data_url)
+    response = http.request('GET', data_url)
+    zippedData = response.data
+    
+    # save data to disk
+    print("Saving to ",zipFilename)
+    output = open(zipFilename,'wb')
+    output.write(zippedData)
+    output.close()
+    
+# extract the data
+zfobj = zipfile.ZipFile(zipFilename)
+for file in zfobj.namelist():
+    outputFilename = "image_data/" + file
+    if not os.path.isfile(outputFilename):
+        uncompressed = zfobj.read(file)
+        # save uncompressed data to disk
+        print("Saving extracted file to ",outputFilename)
+        output = open(outputFilename,'wb')
+        output.write(uncompressed)
+        output.close()
+
+print("Done with download and unzip")
+```
+
+After data is unzipped, it's extracted using pickle library, and stored in X and y variables for training, validation, and test data sets and labels. The pickled data is a dictionary with 4 key/value pairs:
+
+* 'features' is a 4D array containing raw pixel data of the traffic sign images, (num examples, width, height, channels).
+* 'labels' is a 1D array containing the label/class id of the traffic sign. The file signnames.csv contains id -> name mappings for each id.
+* 'sizes' is a list containing tuples, (width, height) representing the original width and height the image.
+* 'coords' is a list containing tuples, (x1, y1, x2, y2) representing coordinates of a bounding box around the sign in the image. THESE COORDINATES ASSUME THE ORIGINAL IMAGE. THE PICKLED DATA CONTAINS RESIZED VERSIONS (32 by 32) OF THESE IMAGES
+
+``` python
+# Load pickled data
+import pickle
+
+training_file = 'image_data/train.p'
+validation_file= 'image_data/valid.p'
+testing_file = 'image_data/test.p'
+
+with open(training_file, mode='rb') as f:
+    train = pickle.load(f)
+with open(validation_file, mode='rb') as f:
+    valid = pickle.load(f)
+with open(testing_file, mode='rb') as f:
+    test = pickle.load(f)
+    
+X_train, y_train = train['features'], train['labels']
+X_valid, y_valid = valid['features'], valid['labels']
+X_test, y_test = test['features'], test['labels']
+
+print("Done with data set loading")
+```
 #### 1. Provide a basic summary of the data set.
 
-I used the pandas library to calculate summary statistics of the traffic
+Next, to get an overview of the data, I used the python and numpy to calculate summary statistics of the traffic
 signs data set:
 
-* The size of training set is ?
-* The size of the validation set is ?
-* The size of test set is ?
-* The shape of a traffic sign image is ?
-* The number of unique classes/labels in the data set is ?
+``` python
+import numpy as np
+### Use python, pandas or numpy methods rather than hard coding the results
+
+# Number of training examples
+n_train = X_train.shape[0]
+
+# Number of validation examples
+n_validation = X_valid.shape[0]
+
+# Number of testing examples.
+n_test = X_test.shape[0]
+
+# What's the shape of an traffic sign image?
+image_shape = (X_test[0].shape)
+
+# How many unique classes/labels there are in the dataset.
+n_classes = np.max(y_train)-np.min(y_train)+1
+
+```
+Here are the statistics:
+
+* The size of training set is 34799
+* The size of the validation set is 4410
+* The size of test set is 12630
+* The shape of a traffic sign image is 32x32x3
+* The number of unique classes/labels in the data set is 43
 
 #### 2. Include an exploratory visualization of the dataset.
 
-Here is an exploratory visualization of the data set. It is a bar chart showing how the data ...
+I used matplotlib library to visualize some sample images in the dataset and also to show the distribution of data between classes in each data set.
+
+``` python
+### Data exploration visualization code goes here.
+### Feel free to use as many code cells as needed.
+import matplotlib.pyplot as plt
+import random
+# Visualizations will be shown in the notebook.
+%matplotlib inline
+
+# Plot some images of different classes
+img_count = 5
+plt.figure(1, figsize=(15,15))
+for i in range(img_count):
+    sub = plt.subplot(1,img_count,i+1)
+    img_num = random.randrange(n_test)
+    plt.imshow(X_test[img_num])
+    sub.set_title(y_test[img_num])
+
+# Plot distribution of each class in each set
+fig2 = plt.figure(2)
+fig2.suptitle('Training data distribution')
+plt.hist(y_train, bins=n_classes)
+
+fig3 = plt.figure(3)
+fig3.suptitle('Validation data distribution')
+plt.hist(y_valid, bins=n_classes)
+
+fig4 = plt.figure(4)
+fig4.suptitle('Test data distribution')
+plt.hist(y_test, bins=n_classes)
+```
+
+Here are some of the example images from the data.
 
 ![alt text][image1]
+
+Another important aspect of data is how it's distributed between classes. Images below show the distribution.
+
+![alt text][image2]
+![alt text][image3]
+![alt text][image4]
+
+It can be seen that some of the classes contain a lot more data than others. This may be a problem for neural network while training as it may force the weights and biases of the network to be scewed towards recognizing images of the more represented classes. We will address this issue in one of the future steps by generating additional image data for classes that are not well represented.
 
 ### Design and Test a Model Architecture
 
@@ -67,8 +201,6 @@ Here is an exploratory visualization of the data set. It is a bar chart showing 
 As a first step, I decided to convert the images to grayscale because ...
 
 Here is an example of a traffic sign image before and after grayscaling.
-
-![alt text][image2]
 
 As a last step, I normalized the image data because ...
 
