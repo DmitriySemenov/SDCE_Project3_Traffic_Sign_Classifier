@@ -24,11 +24,10 @@ The goals / steps of this project are the following:
 [image2]: ./writeup_images/02_TrainDistr.png "Training data distribution"
 [image3]: ./writeup_images/03_ValidDistr.png "Validation data distribution"
 [image4]: ./writeup_images/04_TestDistr.png "Test data distribution"
-
-[image5]: ./examples/placeholder.png "Traffic Sign 2"
-[image6]: ./examples/placeholder.png "Traffic Sign 3"
-[image7]: ./examples/placeholder.png "Traffic Sign 4"
-[image8]: ./examples/placeholder.png "Traffic Sign 5"
+[image5]: ./writeup_images/05_Normalized.png "Grayscaled and normalized"
+[image6]: ./writeup_images/06_Modified.png "Modified image"
+[image7]: ./writeup_images/07_NewData.png "New training data distribution"
+[image8]: ./writeup_images/08_SampleNewImages.png "New training data distribution"
 
 ## Rubric Points
 ### Here I will consider the [rubric points](https://review.udacity.com/#!/rubrics/481/view) individually and describe how I addressed each point in my implementation.  
@@ -198,21 +197,97 @@ It can be seen that some of the classes contain a lot more data than others. Thi
 
 #### 1. Describe how you preprocessed the image data. What techniques were chosen and why did you choose these techniques? Consider including images showing the output of each preprocessing technique. Pre-processing refers to techniques such as converting to grayscale, normalization, etc. (OPTIONAL: As described in the "Stand Out Suggestions" part of the rubric, if you generated additional data for training, describe why you decided to generate additional data, how you generated the data, and provide example images of the additional data. Then describe the characteristics of the augmented training set like number of images in the set, number of images for each class, etc.)
 
-As a first step, I decided to convert the images to grayscale because ...
+To pre-process image data I've chosen two methods: converting rgb images to grayscale and normalizing data, so that the data has mean zero and equal variance. Here are the two functions to do that. I've used OpenCV's `cvtColor()` function to convert to grayscale.
 
-Here is an example of a traffic sign image before and after grayscaling.
+``` python
+def grayscale(image_data):
+    gray = [cv2.cvtColor(x, cv2.COLOR_RGB2GRAY) for x in image_data]
+    gray = np.array(gray)
+    gray = gray[:,:,:,np.newaxis]
+    return gray
 
-As a last step, I normalized the image data because ...
+def normalize(image_data):
+    norm = (image_data-128.0)/128
+    return norm
+```
 
-I decided to generate additional data because ... 
+Images below are some of the samples showing the effect of grayscaling and normalization.
+![alt text][image5]
 
-To add more data to the the data set, I used the following techniques because ... 
+Additionally, I've created a `modify()` function, which is used to generate new images out of existing ones. This function randomly shifts, rotates, and scales an image by a small amount.
 
-Here is an example of an original image and an augmented image:
+``` python
+def modify(img):
+    rows,cols = img.shape
+    
+    # Shift
+    x_shift = random.randrange(-2,2,1)
+    y_shift = random.randrange(-2,2,1)
+    M_shift = np.float32([[1,0,x_shift],[0,1,y_shift]])
+    shifted_img = cv2.warpAffine(img,M_shift,(cols,rows))
+    
+    # Rotation & Scaling
+    angle_rot = random.randrange(-15,15,1)
+    scale = random.uniform(0.9,1.1)
+    M_rot = cv2.getRotationMatrix2D((cols/2,rows/2),angle_rot,scale)
+    rotated_img = cv2.warpAffine(shifted_img,M_rot,(cols,rows))
+    outimg = rotated_img[:,:,np.newaxis]
+    return outimg
+```
+Here is an example of the output of this function applied to a normalized image.
+![alt text][image6]
 
-![alt text][image3]
+Values for the amount of shift, rotation, and scaling were based on the numbers mentioned in [Pierre Sermanet and Yann LeCun's paper](http://yann.lecun.com/exdb/publis/pdf/sermanet-ijcnn-11.pdf).
 
-The difference between the original data set and the augmented data set is the following ... 
+As mentioned earlier, I've decided to generate additional training images to make class distribution more equal.
+I've decided to make the minimum number of samples per class to be 1500.
+
+``` python
+filename_train_n = 'image_data/train_n.p'
+if os.path.isfile(filename_train_n):
+    with open(filename_train_n, mode='rb') as f:
+        train_n = pickle.load(f)
+    X_train_n, y_train = train_n['features'], train_n['labels']
+    print('Finished loading normalized data')
+else:
+    targetimgcount = 1500
+    print('Started generating additional data for image classes.')
+    for class_label in range(n_classes):
+        class_indices = np.where(y_train == class_label)
+        n_samples = len(class_indices[0])
+        if n_samples < targetimgcount:
+            print('Starting sample count for class label ',class_label, ': ', n_samples)
+            for i in range(targetimgcount - n_samples):
+                idx = class_indices[0][i % n_samples]
+                generatedimg = modify(X_train_n[idx].squeeze())
+                X_train_n = np.append(X_train_n, [generatedimg], axis = 0)
+                y_train = np.append(y_train, class_label)
+            print('Finished generating images for class label ',class_label)
+    print('Finished generating additional data for image classes.')
+```
+
+This brought the total number of training images to 67380.
+Here's how the distributions of training data compare after additional images were generated.
+
+| Orignial Distribution         		|     New Distribution	        					| 
+|:-------------------------------------:|:-------------------------------------------------:| 
+![alt text][image2]                     |![alt text][image7]
+
+
+I decided to visualize some of the generated images to make sure that the newly generated images were valid.
+``` python
+gen_img_count = X_train_n.shape[0] - X_train.shape[0]
+img_count = 5
+plt.figure(1, figsize=(15,15))
+for i in range(img_count):
+    sub = plt.subplot(1,img_count,i+1)
+    img_num = X_train.shape[0] + random.randrange(gen_img_count)
+    plt.imshow(X_train_n[img_num].squeeze(),cmap='gray')
+    sub.set_title('idx: ' + str(img_num) + ' class: ' + str(y_train[img_num]))
+```
+
+Here are some of the examples. Their index shows that these are newly created images, since they all have index above 34799.
+![alt text][image8]
 
 
 #### 2. Describe what your final model architecture looks like including model type, layers, layer sizes, connectivity, etc.) Consider including a diagram and/or table describing the final model.
