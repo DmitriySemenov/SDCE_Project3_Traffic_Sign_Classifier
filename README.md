@@ -28,6 +28,22 @@ The goals / steps of this project are the following:
 [image6]: ./writeup_images/06_Modified.png "Modified image"
 [image7]: ./writeup_images/07_NewData.png "New training data distribution"
 [image8]: ./writeup_images/08_SampleNewImages.png "New training data distribution"
+[image9]: ./writeup_images/09_Sermanet.png "New training data distribution"
+[image10]: ./writeup_images/10_FiveImages.png "Five new images"
+[image11]: ./writeup_images/11_FiveImagesNorm.png "Five new images normalized"
+[image12]: ./writeup_images/12_SpeedLimit.png "First image"
+[image13]: ./writeup_images/13_SpeedLimitTop5.png "First image top 5"
+[image14]: ./writeup_images/14_Stop.png "Second image"
+[image15]: ./writeup_images/15_StopTop5.png "Second image top 5"
+[image16]: ./writeup_images/16_RightofWay.png "Third image"
+[image17]: ./writeup_images/17_RightofWayTop5.png "Third image top 5"
+[image18]: ./writeup_images/18_Priority.png "Fourth image"
+[image19]: ./writeup_images/19_PriorityTop5.png "Fourth image top 5"
+[image20]: ./writeup_images/20_Bumpy.png "Fifth image"
+[image21]: ./writeup_images/21_BumpyTop5.png "Fifth image top 5"
+[image22]: ./writeup_images/22_ImageForVisualization.png "Image for visualization"
+[image23]: ./writeup_images/23_ConvLayer1.png "Layer 1 output"
+[image24]: ./writeup_images/24_ConvLayer2.png "Layer 2 output"
 
 ## Rubric Points
 ### Here I will consider the [rubric points](https://review.udacity.com/#!/rubrics/481/view) individually and describe how I addressed each point in my implementation.  
@@ -292,45 +308,160 @@ Here are some of the examples. Their index shows that these are newly created im
 
 #### 2. Describe what your final model architecture looks like including model type, layers, layer sizes, connectivity, etc.) Consider including a diagram and/or table describing the final model.
 
+My final model implementation was a single stage model developed by Sermanet and LeCun and mentioned in this [paper](http://yann.lecun.com/exdb/publis/pdf/sermanet-ijcnn-11.pdf).
+
+The figure from the paper below shows the multi-scale version of the model. 
+![alt text][image9]
+I've implemented a single scale version of the model, where the bottom connection from the 1st stage output directly to the classifier is missing. I've also added an additional fully connected layer with 100 hidden units and a dropout layer before the classifier.
+
 My final model consisted of the following layers:
 
-| Layer         		|     Description	        					| 
-|:---------------------:|:---------------------------------------------:| 
-| Input         		| 32x32x3 RGB image   							| 
-| Convolution 3x3     	| 1x1 stride, same padding, outputs 32x32x64 	|
-| RELU					|												|
-| Max pooling	      	| 2x2 stride,  outputs 16x16x64 				|
-| Convolution 3x3	    | etc.      									|
-| Fully connected		| etc.        									|
-| Softmax				| etc.        									|
-|						|												|
-|						|												|
- 
+| Layer         					|     Description	        					| 
+|:---------------------------------:|:---------------------------------------------:| 
+| Input         					| 32x32x1 Grayscale image   					| 
+| Convolution 5x5     				| 1x1 stride, valid padding, outputs 28x28x30 	|
+| RELU								| Activation layer								|
+| Max pooling	      				| 2x2 stride,  outputs 14x14x64 				|
+| Convolution 5x5					| 1x1 stride, valid padding, outputs 10x10x64 	|
+| RELU								| Activation layer								|
+| Max pooling	      				| 2x2 stride,  outputs 5x5x64 					|
+| Flattening	      				| input 5x5x64, 1600 outputs 					|
+| Fully connected					| 100 outputs 									|
+| RELU								| Activation layer								|
+| Dropout							| 50% dropout during training					|
+| Fully connected/Classifier		| 43 outputs 									|
 
+Softmax is also applied to the final output logits as a part of the function `tf.nn.softmax_cross_entropy_with_logits()` used for training.
+
+Below is the code for the function that sets up the model architecture.
+
+``` python
+def SermanetSS(x):    
+    # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
+    mu = 0
+    sigma = 0.1
+    conv1_f = 30
+    conv2_f = 64
+    fc1_nodes = 100
+    classes = 43
+    
+    # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x30.
+    conv1_w = tf.Variable(tf.truncated_normal([5, 5, 1, conv1_f], mean = mu, stddev = sigma), name = 'conv1_w')
+    conv1_b = tf.Variable(tf.truncated_normal([conv1_f], mean = mu, stddev = sigma), name = 'conv1_b')
+    conv1_stride = 1
+    conv1 = tf.nn.conv2d(x, conv1_w, strides=[1, conv1_stride, conv1_stride, 1], padding='VALID', name = 'conv1')
+    conv1 = tf.nn.bias_add(conv1, conv1_b)
+    # Activation.
+    conv1 = tf.nn.relu(conv1, name = 'conv1_relu')
+    # Pooling. Input = 28x28x30. Output = 14x14x30.
+    k = 2
+    conv1 = tf.nn.max_pool(conv1, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='VALID', name = 'conv1_pool')
+    # Layer 2: Convolutional. Output = 10x10x64.
+    conv2_w = tf.Variable(tf.truncated_normal([5, 5, conv1_f, conv2_f], mean = mu, stddev = sigma), name = 'conv2_w')
+    conv2_b = tf.Variable(tf.truncated_normal([conv2_f], mean = mu, stddev = sigma), name = 'conv2_b')
+    conv2_stride = 1
+    conv2 = tf.nn.conv2d(conv1, conv2_w, strides=[1, conv2_stride, conv2_stride, 1], padding='VALID', name = 'conv2')
+    conv2 = tf.nn.bias_add(conv2, conv2_b)
+    # Activation.
+    conv2 = tf.nn.relu(conv2, name = 'conv2_relu')
+    # Pooling. Input = 10x10x64. Output = 5x5x64.
+    k = 2
+    conv2 = tf.nn.max_pool(conv2, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='VALID', name = 'conv2_pool')
+    # Flatten. Input = 5x5x64. Output = 1600.
+    flat = tf.contrib.layers.flatten(conv2)
+    # Layer 3: Fully Connected. Input = 1600. Output = 100.
+    fc1_w = tf.Variable(tf.truncated_normal([5*5*conv2_f, fc1_nodes], mean = mu, stddev = sigma), name = 'fc1_w')
+    fc1_b = tf.Variable(tf.truncated_normal([fc1_nodes], mean = mu, stddev = sigma), name = 'fc1_b')
+    fc1 = tf.add(tf.matmul(flat, fc1_w), fc1_b)
+    # Activation.
+    fc1 = tf.nn.relu(fc1, name = 'fc1_relu')
+    # Dropout
+    fc1 = tf.nn.dropout(fc1, dropout)
+    # Layer 4: Fully Connected. Input = 100. Output = 43.
+    fc2_w = tf.Variable(tf.truncated_normal([fc1_nodes, classes], mean = mu, stddev = sigma), name = 'fc2_w')
+    fc2_b = tf.Variable(tf.truncated_normal([classes], mean = mu, stddev = sigma), name = 'fc2_b')
+    fc2 = tf.add(tf.matmul(fc1, fc2_w), fc2_b)
+    logits = fc2
+    return logits
+```
 
 #### 3. Describe how you trained your model. The discussion can include the type of optimizer, the batch size, number of epochs and any hyperparameters such as learning rate.
 
-To train the model, I used an ....
+To train the model, I used an Adam optimizer. Here's the code that sets up the optimizer and loss function.
+
+``` python
+x = tf.placeholder(tf.float32, (None, 32, 32, 1))
+y = tf.placeholder(tf.int32, (None))
+dropout = tf.placeholder(tf.float32)
+one_hot_y = tf.one_hot(y, 43)
+logits = SermanetSS(x)
+cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=one_hot_y, logits=logits)
+loss_operation = tf.reduce_mean(cross_entropy)
+optimizer = tf.train.AdamOptimizer(learning_rate = rate)
+training_operation = optimizer.minimize(loss_operation)
+```
+
+The code to execute the training:
+
+``` python
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    num_examples = len(X_train_n)
+    
+    print("Training...")
+    print()
+    for i in range(EPOCHS):
+        X_train_n, y_train = shuffle(X_train_n, y_train)
+        # Train    
+        for offset in range(0, num_examples, BATCH_SIZE):
+            end = offset + BATCH_SIZE
+            batch_x, batch_y = X_train_n[offset:end], y_train[offset:end]
+            sess.run(training_operation, feed_dict={x: batch_x, y: batch_y, dropout: keep_prob})
+```
+
+The hyperparameters I've selected are:
+
+``` python
+    EPOCHS = 60
+    BATCH_SIZE = 100
+    rate = 0.0005
+    keep_prob = 0.5
+```
 
 #### 4. Describe the approach taken for finding a solution and getting the validation set accuracy to be at least 0.93. Include in the discussion the results on the training, validation and test sets and where in the code these were calculated. Your approach may have been an iterative process, in which case, outline the steps you took to get to the final solution and why you chose those steps. Perhaps your solution involved an already well known implementation or architecture. In this case, discuss why you think the architecture is suitable for the current problem.
 
+First, the architecture I've used was the same LeNet model from the digit classification example. The only change that I made was to extend the number of classes from 10 to 43. Using this model for traffic sign recognition makes sense as the task of classifing handwritten digits is very similar with the exception of having more classes to choose from. 
+The sizes of inputs and outputs of layers of this model were the following:
+
+32x32x1 -> 28x28x6 -> 14x14x6 -> 10x10x16 -> 5x5x16 -> 400 -> 120 -> 84 -> 43.
+
+It was able to achieve 94.5% validation accuracy. This model was trained on the original training data set, so the class distribution of data was uneven.
+
+Next, I've decided to implement a model from the [paper](http://yann.lecun.com/exdb/publis/pdf/sermanet-ijcnn-11.pdf) by Sermanet and LeCun. They were able to achieve accuracy of above 98%, so I was hoping to get close to that number. I wanted to start with the simpler architecture first, which is the single scale model. It's pretty much the same LeNet model architecture, with additional features (30 and 64) in each convolution layer. Again, it makes sense to use the same or similar architecture as it's proven to be effective on a similar task. Extending the number of features in each layer should help because of increased number of classes.
+The sizes of inputs and outputs of layers of this model were the following:
+
+32x32x1 -> 28x28x30 -> 14x14x64 -> 10x10x64 -> 5x5x64 -> 1600 -> 100 -> 100 -> 43
+
+A change from orignial LeNet to this model resulted in improved validation accuracy of 96.5%.
+
+The next thing I wanted to try was to improve the distribution of data across the classes, so I've generated additional images to make the minimum number of samples per class at first 500 and then 1500. The validation accuracy changed to 97.5% and 96.4% respectively. Model architecture remained the same as above. I assumed that the drop in accuracy happened because of variation in model parameter initialization and not an inherent issue with having more data to train on. 
+
+The last change to the model that I made was adding a dropout layer and removing one of the fully connected layers. Having a dropout layer helps improve model's accuracy by having it essentialy try to classify the image using only part of the model's architecture.
+This resulted in the final model architecture as mentioned in the previous section.
+The sizes of inputs and outputs of layers of this model were the following:
+
+32x32x1 -> 28x28x30 -> 14x14x64 -> 10x10x64 -> 5x5x64 -> 1600 -> 100 -> 43. 
+
+This model resulted in validation accuracy of 98%.
+
+At this point I was happy with the results as they were close to the ones reported in the aforementioned paper and decided to test the model on the training set and a test set.
+
 My final model results were:
-* training set accuracy of ?
-* validation set accuracy of ? 
-* test set accuracy of ?
+* training set accuracy of 100%
+* validation set accuracy of 97.5%
+* test set accuracy of 96.7%
 
-If an iterative approach was chosen:
-* What was the first architecture that was tried and why was it chosen?
-* What were some problems with the initial architecture?
-* How was the architecture adjusted and why was it adjusted? Typical adjustments could include choosing a different model architecture, adding or taking away layers (pooling, dropout, convolution, etc), using an activation function or changing the activation function. One common justification for adjusting an architecture would be due to overfitting or underfitting. A high accuracy on the training set but low accuracy on the validation set indicates over fitting; a low accuracy on both sets indicates under fitting.
-* Which parameters were tuned? How were they adjusted and why?
-* What are some of the important design choices and why were they chosen? For example, why might a convolution layer work well with this problem? How might a dropout layer help with creating a successful model?
-
-If a well known architecture was chosen:
-* What architecture was chosen?
-* Why did you believe it would be relevant to the traffic sign application?
-* How does the final model's accuracy on the training, validation and test set provide evidence that the model is working well?
- 
+This proved that model was well trained and the architecture of the model was selected successfully for the task of traffic sign classification. 
 
 ### Test a Model on New Images
 
@@ -338,42 +469,91 @@ If a well known architecture was chosen:
 
 Here are five German traffic signs that I found on the web:
 
-![alt text][image4] ![alt text][image5] ![alt text][image6] 
-![alt text][image7] ![alt text][image8]
+![alt text][image10]
 
-The first image might be difficult to classify because ...
+They are not particularly difficult images to classify, but they were resized from the original image sizes down to a 32x32 image, so this may cause some issues for the classifier as the sign proportions may be off.
+
+I manually provided a class label for each image, converted them to grayscale and normalized to match the expected neural network input.
+
+![alt text][image11]
 
 #### 2. Discuss the model's predictions on these new traffic signs and compare the results to predicting on the test set. At a minimum, discuss what the predictions were, the accuracy on these new predictions, and compare the accuracy to the accuracy on the test set (OPTIONAL: Discuss the results in more detail as described in the "Stand Out Suggestions" part of the rubric).
 
 Here are the results of the prediction:
 
-| Image			        |     Prediction	        					| 
-|:---------------------:|:---------------------------------------------:| 
-| Stop Sign      		| Stop sign   									| 
-| U-turn     			| U-turn 										|
-| Yield					| Yield											|
-| 100 km/h	      		| Bumpy Road					 				|
-| Slippery Road			| Slippery Road      							|
+| Image					        |     Prediction	        					| 
+|:-----------------------------:|:---------------------------------------------:| 
+| Speed limit 70 km/h      		| Speed limit 70 km/h							| 
+| Stop      					| Stop 											|
+| Right-of-way					| Right-of-way									|
+| Priority road   				| Priority road					 				|
+| Bumpy road					| Bumpy road      								|
 
 
-The model was able to correctly guess 4 of the 5 traffic signs, which gives an accuracy of 80%. This compares favorably to the accuracy on the test set of ...
+The model was able to correctly guess 5 of the 5 traffic signs, which gives an accuracy of 100%. This compares favorably to the accuracy on the test set of 96.7%. These images were not particularly difficult and the proportions were only slightly distorted, so it makes sense that the model was able to correctly predict all of them.
 
 #### 3. Describe how certain the model is when predicting on each of the five new images by looking at the softmax probabilities for each prediction. Provide the top 5 softmax probabilities for each image along with the sign type of each probability. (OPTIONAL: as described in the "Stand Out Suggestions" part of the rubric, visualizations can also be provided such as bar charts)
 
-The code for making predictions on my final model is located in the 11th cell of the Ipython notebook.
+Here's my code for top 5 softmax probabilities for each image:
 
-For the first image, the model is relatively sure that this is a stop sign (probability of 0.6), and the image does contain a stop sign. The top five soft max probabilities were
+``` python
+with tf.Session() as sess:
+    saver.restore(sess, "model.ckpt")
+    for idx in range(len(images_norm)):
+        (top_prob, top_classes) = sess.run(top_five, feed_dict={x: [images_norm[idx]], y: images_y[idx], dropout: 1})
+        np.set_printoptions(precision=2, suppress=True)
+        plt.figure((idx*2), figsize=(2,2))
+        plt.imshow(images_rgb[idx].squeeze())
+        plt.figure((idx+1)*2-1, figsize=(10,10))
+        for cls in range(len(top_classes[0])):
+            sub = plt.subplot(1,5,cls+1)
+            class_indices = np.where(y_test == top_classes[0][cls])
+            class_sample = class_indices[0][0]
+            plt.imshow(X_test[class_sample])
+            sub.set_title('Probability: {:.1f}%'.format(top_prob[0][cls]*100))
+```
 
-| Probability         	|     Prediction	        					| 
-|:---------------------:|:---------------------------------------------:| 
-| .60         			| Stop sign   									| 
-| .20     				| U-turn 										|
-| .05					| Yield											|
-| .04	      			| Bumpy Road					 				|
-| .01				    | Slippery Road      							|
+For each image, I've decided to plot sample images of the top 5 classes with the probability percentage value shown on top of them.
 
+For the first image of the 70 km/h speed limit sign, the model is absolutely sure it's a 70 km/h speed limit sign (probability of 100%).
 
-For the second image ... 
+![alt text][image12]
+![alt text][image13]
+
+The next best candidate is a 20 km/h speed limit sign. It makes sense as a 2 looks similar to a 7, but the probability of that is very small.
+
+For the second image of the stop sign, the model is absolutely sure it's a stop sign (probability of 100%).
+
+![alt text][image14]
+![alt text][image15]
+
+The other options do not make much sense to me, but their probabilites are very very low.
+
+For the third image of the right-of-way sign, the model is again absolutely sure it's a right-of-way sign (probability of 100%).
+
+![alt text][image16]
+![alt text][image17]
+
+The other 4 options do have some features in common with the actual sign, such as triangular shape of the sign and the shape in the middle of the sign that looks similar. Their probabilites are still very very low, so the model is very certain about the prediction.
+
+For the fourth image of the priority road sign, the model is absolutely sure it's a priority road sign (probability of 100%).
+
+![alt text][image18]
+![alt text][image19]
+
+The other options do not make much sense to me, but their probabilites are very very low.
+
+For the final image of the bumpy road sign, the model is absolutely sure it's a bumpy road sign (probability of 100%).
+
+![alt text][image20]
+![alt text][image21]
+
+Options 2,3, and 4 do have some features in common with the actual sign, such as triangular shape of the sign and the shape in the middle of the sign that looks similar. The last of the top 5 looks quite different. In any case, their probabilites are very low, so the model is very certain about the correct prediction.
+
+Overall, the model is very confident about each of the image's predicitons and it has the right to be as it predicted the class of every one of the images correctly!
 
 ### (Optional) Visualizing the Neural Network (See Step 4 of the Ipython notebook for more details)
 #### 1. Discuss the visual output of your trained network's feature maps. What characteristics did the neural network use to make classifications?
+![alt text][image22]
+![alt text][image23]
+![alt text][image24]
