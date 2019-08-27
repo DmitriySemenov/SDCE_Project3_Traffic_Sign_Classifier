@@ -452,7 +452,7 @@ The sizes of inputs and outputs of layers of this model were the following:
 
 32x32x1 -> 28x28x30 -> 14x14x64 -> 10x10x64 -> 5x5x64 -> 1600 -> 100 -> 43. 
 
-This model resulted in validation accuracy of 98%.
+This model resulted in validation accuracy of 97.5%.
 
 At this point I was happy with the results as they were close to the ones reported in the aforementioned paper and decided to test the model on the training set and a test set.
 
@@ -515,35 +515,35 @@ with tf.Session() as sess:
 
 For each image, I've decided to plot sample images of the top 5 classes with the probability percentage value shown on top of them.
 
-For the first image of the 70 km/h speed limit sign, the model is absolutely sure it's a 70 km/h speed limit sign (probability of 100%).
+For the first image (70 km/h speed limit sign), the model is absolutely sure it's a 70 km/h speed limit sign (probability of 100%).
 
 ![alt text][image12]
 ![alt text][image13]
 
 The next best candidate is a 20 km/h speed limit sign. It makes sense as a 2 looks similar to a 7, but the probability of that is very small.
 
-For the second image of the stop sign, the model is absolutely sure it's a stop sign (probability of 100%).
+For the second image (stop sign), the model is absolutely sure it's a stop sign (probability of 100%).
 
 ![alt text][image14]
 ![alt text][image15]
 
 The other options do not make much sense to me, but their probabilites are very very low.
 
-For the third image of the right-of-way sign, the model is again absolutely sure it's a right-of-way sign (probability of 100%).
+For the third image (right-of-way sign), the model is again absolutely sure it's a right-of-way sign (probability of 100%).
 
 ![alt text][image16]
 ![alt text][image17]
 
 The other 4 options do have some features in common with the actual sign, such as triangular shape of the sign and the shape in the middle of the sign that looks similar. Their probabilites are still very very low, so the model is very certain about the prediction.
 
-For the fourth image of the priority road sign, the model is absolutely sure it's a priority road sign (probability of 100%).
+For the fourth image (priority road sign), the model is absolutely sure it's a priority road sign (probability of 100%).
 
 ![alt text][image18]
 ![alt text][image19]
 
 The other options do not make much sense to me, but their probabilites are very very low.
 
-For the final image of the bumpy road sign, the model is absolutely sure it's a bumpy road sign (probability of 100%).
+For the final image (bumpy road sign), the model is absolutely sure it's a bumpy road sign (probability of 100%).
 
 ![alt text][image20]
 ![alt text][image21]
@@ -554,6 +554,59 @@ Overall, the model is very confident about each of the image's predicitons and i
 
 ### (Optional) Visualizing the Neural Network (See Step 4 of the Ipython notebook for more details)
 #### 1. Discuss the visual output of your trained network's feature maps. What characteristics did the neural network use to make classifications?
+To get an idea of what features neural network is looking for in an image, I've run the following code that plots all the feature maps for both convolutional layers:
+
+``` python
+def outputFeatureMap(sess, image_input, tf_activation, activation_min=-1, activation_max=-1 ,plt_num=1):
+    # Here make sure to preprocess your image_input in a way your network expects
+    # with size, normalization, ect if needed
+    # image_input =
+    # Note: x should be the same name as your network's tensorflow data placeholder variable
+    # If you get an error tf_activation is not defined it may be having trouble accessing the variable from inside a function
+    activation = tf_activation.eval(session=sess,feed_dict={x: image_input, dropout: 1})
+    featuremaps = activation.shape[3]
+    plt.figure(plt_num, figsize=(15,15))
+    for featuremap in range(featuremaps):
+        plt.subplot(10,8, featuremap+1) # sets the number of feature maps to show on each row and column
+        plt.title('FeatureMap ' + str(featuremap)) # displays the feature map number
+        if activation_min != -1 & activation_max != -1:
+            plt.imshow(activation[0,:,:, featuremap], interpolation="nearest", vmin =activation_min, vmax=activation_max, cmap="gray")
+        elif activation_max != -1:
+            plt.imshow(activation[0,:,:, featuremap], interpolation="nearest", vmax=activation_max, cmap="gray")
+        elif activation_min !=-1:
+            plt.imshow(activation[0,:,:, featuremap], interpolation="nearest", vmin=activation_min, cmap="gray")
+        else:
+            plt.imshow(activation[0,:,:, featuremap], interpolation="nearest", cmap="gray")
+
+with tf.Session() as sess:
+    saver.restore(sess, "model.ckpt")
+    
+    #print([tensor.name for tensor in tf.get_default_graph().as_graph_def().node])
+    img_num = random.randrange(n_test)
+    plt.figure(1)
+    plt.imshow(X_test_n[img_num].squeeze(), cmap='gray')
+    plt.title(y_test[img_num])
+    
+    tens1 = sess.graph.get_tensor_by_name('conv1_relu:0')
+    tens2 = sess.graph.get_tensor_by_name('conv2_relu:0')
+    
+    outputFeatureMap(sess, [X_test_n[img_num]], tf_activation = tens1, plt_num = 2)
+    outputFeatureMap(sess, [X_test_n[img_num]], tf_activation = tens2, plt_num = 3)
+```
+
+The image that was randomly selected is an end of 80 km/h speed limit sign.
+
 ![alt text][image22]
+
+The output of the first convolutional layer is shown below:
+
 ![alt text][image23]
+
+From the output, some important features can be seen. For example, feature map 22 shows that the network is looking for a circular shape of the sign and the number 80. Number 80 can also be seen in feature map 1. The the diagonal line with a positive slope crossing the sign shows up clearly in feature maps 8 and 26. A lot of the feature maps highlight that the sign is circular in shape.
+
+The output of the second convolutional layer is shown below:
 ![alt text][image24]
+
+It's much harder to understand what is being shown here, but the diagonal lines with a positive slope and circular shapes (that could potentially be combined to make number 80) are present here as well.
+
+Overall, it's not always perfectly clear how the neural network decides on what sign it's seeing, but it does give a bit of an insight into it.
